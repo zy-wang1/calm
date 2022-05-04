@@ -401,11 +401,9 @@ tmle3_Update <- R6Class(
           min_eps = delta_epsilon %>% sapply(min)
           max_eps = delta_epsilon %>% sapply(max)
 
-          optim_fit <- optim(
-            # par = list(epsilon = max_eps), fn = risk,
-              par =
-                  # rep(0, length(max_eps))
-                             (min_eps + max_eps)/10
+          optim_fit <- optim(par = (min_eps + max_eps)/10
+                             # par = list(epsilon = max_eps), fn = risk
+                             # rep(0, length(max_eps))                             
                          , fn = risk,
             lower = min_eps, upper = max_eps,
             method = "L-BFGS-B"
