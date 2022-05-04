@@ -532,8 +532,12 @@ Param_mediation_dimr <- R6Class(
         # self$observed_likelihood$updater$tmle_params %>% lapply(function(param) for (node in all_update_nodes) {
         self$observed_likelihood$updater$tmle_params %>% lapply(function(param) for (node in param$update_nodes) {
             # param$gradient$expand_task(mc_task_trt, node)
-            param$clever_covariates(mc_task_trt, fold_number, node)
-            param$clever_covariates(mc_task_ctrl, fold_number, node)
+            if (is.null(self$observed_likelihood$cache$get_update_step(self$observed_likelihood$factor_list[[node]], mc_task_trt, fold_number, node))) {
+                param$clever_covariates(mc_task_trt, fold_number, node)    
+            }
+            if (is.null(self$observed_likelihood$cache$get_update_step(self$observed_likelihood$factor_list[[node]], mc_task_ctrl, fold_number, node))) {
+                param$clever_covariates(mc_task_ctrl, fold_number, node)
+            }
             })
         # for (param in self$observed_likelihood$updater$tmle_params) for (node in all_update_nodes) {
         #     # param$gradient$expand_task(mc_task_trt, node)

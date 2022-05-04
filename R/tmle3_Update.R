@@ -390,27 +390,37 @@ tmle3_Update <- R6Class(
           if(is.function(delta_epsilon)) {
             delta_epsilon <- delta_epsilon(submodel_data$H)
           }
-
-          # ZW: allow 0 delta_epsilon
-          if (any(delta_epsilon == 0)) {
-            # warning("delta_epsilon=0 for optim_delta_epsilon=T! delta_epsilon is set to 1E-8. ")
+          delta_epsilon_vec <- delta_epsilon
+          if (length(delta_epsilon) > 1) {
               delta_epsilon[delta_epsilon == 0] <- 1E-8
+              delta_epsilon <- lapply(delta_epsilon, function(each_d) c(0, each_d))
+              min_eps = delta_epsilon %>% sapply(min)
+              max_eps = delta_epsilon %>% sapply(max)
+          } else {
+              # ZW: allow 0 delta_epsilon
+              if (any(delta_epsilon == 0)) {
+                  # warning("delta_epsilon=0 for optim_delta_epsilon=T! delta_epsilon is set to 1E-8. ")
+                  delta_epsilon[delta_epsilon == 0] <- 1E-8
+              }
+              delta_epsilon <- c(0, delta_epsilon)
+              min_eps = min(delta_epsilon)
+              max_eps = max(delta_epsilon)
           }
-          delta_epsilon <- lapply(delta_epsilon, function(each_d) c(0, each_d))
-
-          min_eps = delta_epsilon %>% sapply(min)
-          max_eps = delta_epsilon %>% sapply(max)
-
-          optim_fit <- optim(par = (min_eps + max_eps)/10
+          
+          optim_fit <- optim(par = 
+                                 (min_eps + max_eps)/5
                              # par = list(epsilon = max_eps), fn = risk
-                             # rep(0, length(max_eps))                             
+                             # rep(0, length(max_eps))
                          , fn = risk,
             lower = min_eps, upper = max_eps,
+            # method = "BFGS"
             method = "L-BFGS-B"
             # method = "Brent"
           )
           epsilon <- optim_fit$par
-
+          
+          # epsilon[delta_epsilon_vec == 0] <- 0
+          
         } else {
           epsilon <- self$delta_epsilon
           if(is.function(epsilon)) {
