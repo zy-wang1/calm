@@ -1,0 +1,5 @@
+useDynLib(calm, .registration=TRUE)
+exportPattern("^[[:alpha:]]+")
+importFrom(Rcpp, evalCpp)
+importFrom(R6, R6Class)
+import(data.table) 
