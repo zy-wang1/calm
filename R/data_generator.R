@@ -84,8 +84,10 @@ data_generator <- function(sample_size, tau, seed = NULL, setAM = NULL, if_LY_mi
                                   .f = ~ rbinom(n = 1, size = 1, prob = .x)
                 )
                 temp_Y <- map_dbl(.x = expit((Y_int + Y_scaling * (0.2 + 1.5*L02 + temp_R + 0.2*temp_L - 0.3*temp_A_E - 0.3*temp_Z
-                                                                  # - 0.2*temp_A_E*temp_Z
-                                                                  - 0.1*ifelse_vec(t>1, temp_data[[t]]$R, 0)))^2 ),
+                                                                  - 0.2*temp_A_E*temp_Z
+                                                                  + 0.5*temp_R*temp_Z
+                                                                  + 0.8*temp_L*temp_Z
+                                                                  - 0.1*ifelse_vec(t>1, temp_data[[t]]$R, 0))) ),
                                   .f = ~ rbinom(n = 1, size = 1, prob = .x)
                 )
                 
@@ -167,10 +169,13 @@ data_generator <- function(sample_size, tau, seed = NULL, setAM = NULL, if_LY_mi
                                   .f = ~ rbinom(n = 1, size = 1, prob = .x)
                 )
                 temp_Y <- map_dbl(.x = expit((Y_int + Y_scaling * (0.2 + 1.5*L02 + temp_R + 0.2*temp_L - 0.3*temp_A_E - 0.3*temp_Z
-                                                                   # - 0.2*temp_A_E*temp_Z
-                                                                   - 0.1*ifelse_vec(t>1, temp_data[[t]]$R, 0)))^2 ),
+                                                                   - 0.2*temp_A_E*temp_Z
+                                                                   + 0.5*temp_R*temp_Z
+                                                                   + 0.8*temp_L*temp_Z
+                                                                   - 0.1*ifelse_vec(t>1, temp_data[[t]]$R, 0))) ),
                                   .f = ~ rbinom(n = 1, size = 1, prob = .x)
                 )
+                
                 # temp_Y <- 1-temp_Y
                 if (if_competing_risk) {
                     temp_Y[temp_data[[t]]$Y2 == 1] <- 0  # remove cause specific death if there has been a competing condition
