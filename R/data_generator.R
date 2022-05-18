@@ -79,14 +79,25 @@ data_generator <- function(sample_size, tau, seed = NULL, setAM = NULL, if_LY_mi
                 #                   .f = ~ rbinom(n = 1, size = 1, prob = .x)
                 # )
                 # temp_Y <- 1-temp_Y
-                temp_L <- map_dbl(.x = expit(- 1 + 0.3*L02^2 + temp_A_E^2 + 0.7*temp_Z^2 - 0.2*ifelse_vec(t>1, temp_data[[t]]$L1, 0)^2),
+                
+                temp_L <- map_dbl(.x = expit(- 1 + 0.3*L02 + temp_A_E + 0.7*temp_Z - 0.2*ifelse_vec(t>1, temp_data[[t]]$L1, 0)),
                                   .f = ~ rbinom(n = 1, size = 1, prob = .x)
                 )
-                temp_Y <- map_dbl(.x = expit(Y_int + Y_scaling * (0.2 + 1.5*L02^2 + temp_R^2 + 0.2*temp_L^2 - 0.3*temp_A_E^2 - 0.3*temp_Z^2
-                                                                  # - 0.2*temp_A_E*temp_Z^2
-                                                                  - 0.1*ifelse_vec(t>1, temp_data[[t]]$R, 0)^2) ),
+                temp_Y <- map_dbl(.x = expit((Y_int + Y_scaling * (0.2 + 1.5*L02 + temp_R + 0.2*temp_L - 0.3*temp_A_E - 0.3*temp_Z
+                                                                  # - 0.2*temp_A_E*temp_Z
+                                                                  - 0.1*ifelse_vec(t>1, temp_data[[t]]$R, 0)))^2 ),
                                   .f = ~ rbinom(n = 1, size = 1, prob = .x)
                 )
+                
+                
+                # temp_L <- map_dbl(.x = expit(- 1 + 0.3*L02^2 + temp_A_E^2 + 0.7*temp_Z^2 - 0.2*ifelse_vec(t>1, temp_data[[t]]$L1, 0)^2),
+                #                   .f = ~ rbinom(n = 1, size = 1, prob = .x)
+                # )
+                # temp_Y <- map_dbl(.x = expit(Y_int + Y_scaling * (0.2 + 1.5*L02^2 + temp_R^2 + 0.2*temp_L^2 - 0.3*temp_A_E^2 - 0.3*temp_Z^2
+                #                                                   # - 0.2*temp_A_E*temp_Z^2
+                #                                                   - 0.1*ifelse_vec(t>1, temp_data[[t]]$R, 0)^2) ),
+                #                   .f = ~ rbinom(n = 1, size = 1, prob = .x)
+                # )
                 # temp_Y <- 1-temp_Y
                 if (if_competing_risk) {
                     temp_Y2 <- map_dbl(.x = expit(-0.5 + 0.1*temp_R^2 + 0.1*temp_L^2 - 0.1*temp_A_E^2 - 0.1*temp_Z^2
@@ -155,9 +166,9 @@ data_generator <- function(sample_size, tau, seed = NULL, setAM = NULL, if_LY_mi
                 temp_L <- map_dbl(.x = expit(- 1 + 0.3*L02^2 + temp_A_E^2 + 0.7*temp_Z^2 - 0.2*ifelse_vec(t>1, temp_data[[t]]$L1, 0)^2),
                                   .f = ~ rbinom(n = 1, size = 1, prob = .x)
                 )
-                temp_Y <- map_dbl(.x = expit(Y_int + Y_scaling * (0.2 + 1.5*L02^2 + temp_R^2 + 0.2*temp_L^2 - 0.3*temp_A_E^2 - 0.3*temp_Z^2
-                                                                  # - 0.2*temp_A_E*temp_Z^2
-                                                                  - 0.1*ifelse_vec(t>1, temp_data[[t]]$R, 0)^2) ),
+                temp_Y <- map_dbl(.x = expit((Y_int + Y_scaling * (0.2 + 1.5*L02 + temp_R + 0.2*temp_L - 0.3*temp_A_E - 0.3*temp_Z
+                                                                   # - 0.2*temp_A_E*temp_Z
+                                                                   - 0.1*ifelse_vec(t>1, temp_data[[t]]$R, 0)))^2 ),
                                   .f = ~ rbinom(n = 1, size = 1, prob = .x)
                 )
                 # temp_Y <- 1-temp_Y
