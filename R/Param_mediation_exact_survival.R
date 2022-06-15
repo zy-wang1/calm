@@ -35,6 +35,9 @@ Param_mediation_exact_survival <- R6Class(
             }
             intervention_nodes <- union(names(self$intervention_list_treatment), names(self$intervention_list_control))
             
+            loc_outcome <- which(names(self$observed_likelihood$training_task$npsem) == self$outcome_node)  # directly define the loc of outcome
+            # var_outcome <- tmle_task$npsem[[loc_outcome]]$variables
+            
             if (fold_number == "full") {  # tmle
                 list_EIC <- private$.list_EIC
             } else if (fold_number == "validation") {  # cvtmle
@@ -60,7 +63,9 @@ Param_mediation_exact_survival <- R6Class(
                 list_all_predicted_lkd <- lapply(1:length(full_node_names), function(loc_node) {
                     if (loc_node > 1) {
                         current_variable <- full_task$npsem[[loc_node]]$variables
-                        loc_impute <- grep("Y_|A_C_", full_node_names)  # remain alive and uncensored before current variable
+                        loc_impute <- grep("^Y_|^A_C_", full_node_names)  # remain alive and uncensored before current variable
+                        loc_A_C <- grep("^A_C_", full_node_names)
+                        if (length(loc_A_C) > 0) loc_impute <- loc_impute[loc_impute <= last(loc_A_C)]  # the event after the last censoring node can be alive/dead; do not impute
                         loc_impute <- loc_impute[loc_impute < loc_node]
                         if (length(loc_impute) == 0) {  # no subject can drop out/die yet
                             temp_input <- expand_values(variables = full_variable_names[1:which(full_variable_names == current_variable)])  # all possible inputs
@@ -126,10 +131,16 @@ Param_mediation_exact_survival <- R6Class(
                                              fold_number)
                     list_Q <- get_obs_Q_list(tmle_task, obs_data,
                                              intervention_variables, intervention_levels_treat, intervention_levels_control,
-                                             list_all_predicted_lkd  # val version decided above for fold_number == "validation"
+                                             list_all_predicted_lkd,  # val version decided above for fold_number == "validation"
+                                             loc_outcome
                     )
                     temp_vec <- tmle_task$get_tmle_node(length(list_Q))
-                    temp_vec <- temp_vec[!is.na(temp_vec)]
+                    if (!is.null(tmle_task$npsem[[length(list_Q)]]$censoring_node$name)) {
+                        to_keep <- tmle_task$get_tmle_node(tmle_task$npsem[[length(list_Q)]]$censoring_node$name)
+                        to_keep <- to_keep == 1
+                        to_keep[is.na(to_keep)] <- F
+                        temp_vec <- temp_vec[to_keep]
+                    }
                     list_Q[[length(list_Q)+1]] <- temp_vec
                     list_delta_Q <- lapply(1:length(list_H), function(i) {
                         if (is.null(list_Q[[i]]))
@@ -210,13 +221,13 @@ Param_mediation_exact_survival <- R6Class(
                                                     tmle_task, obs_variable_names,
                                                     intervention_variables, intervention_levels_treat, intervention_levels_control,
                                                     list_all_predicted_lkd,  # this is decided above by fold_number
-                                                    if_survival = T
+                                                    if_survival = T, loc_outcome
                     )
                     current_Q <- get_current_Q(loc_node, which_Q = 0,
                                                tmle_task, obs_variable_names,
                                                intervention_variables, intervention_levels_treat, intervention_levels_control,
                                                list_all_predicted_lkd,  # this is decided above by fold_number
-                                               if_survival = T
+                                               if_survival = T, loc_outcome
                     )
                     current_delta_Q <- current_Q_next - current_Q
                     current_EIC <- current_H*current_delta_Q
