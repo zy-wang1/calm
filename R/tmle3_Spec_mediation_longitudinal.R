@@ -150,12 +150,12 @@ tmle3_Spec_mediation_long <- R6Class(
             }
 
             if (is.null(if_projection)) {
-                param <- Param_mediation_survival$new(likelihood, treatment, control)
+                param <- Param_mediation_exact_survival$new(likelihood, treatment, control, outcome = outcome)
             } else if (!if_projection) {
-                param <- Param_mediation_survival$new(likelihood, treatment, control)
+                param <- Param_mediation_exact_survival$new(likelihood, treatment, control, outcome = outcome)
             } else if (if_projection) {
                 # param <- Param_mediation_projection$new(likelihood, treatment, control, static_likelihood, n_resampling)
-                param <- Param_mediation_dimr$new(likelihood, treatment, control, static_likelihood, n_resampling,
+                param <- Param_mediation_hal_survival$new(likelihood, treatment, control, static_likelihood, n_resampling,
                                                   outcome = outcome, tau = tau)
             } else stop("Error: if_projection needs to be either True or False/NULL. ")
             return(param)
