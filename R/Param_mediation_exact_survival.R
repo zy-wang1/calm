@@ -434,6 +434,6 @@ Param_mediation_exact_survival <- R6Class(
         .result = NULL,
         .result_val = NULL,
         .submodel_type_supported = c("EIC"), 
-        .outcome_node
+        .outcome_node = NULL
     )
 )
