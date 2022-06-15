@@ -426,11 +426,11 @@ get_obs_Q_list <- function(tmle_task, obs_data,
                                        pmap_dbl(temp_list, prod) %>% sum %>% return
                                      })
       )
-      if (any(is.na(last(library_output)))) {  # only reason to have NA here is Y=0
-        if (!all(library_output[is.na(last(library_output)), ncol(library_output)-1] == 0)) stop(
+      if (any(is.na(library_output[[ncol(library_output)]]))) {  # only reason to have NA here is Y=0
+        if (!all(library_output[is.na(library_output[[ncol(library_output)]]), ncol(library_output)-1] == 0)) stop(
           "list_all_predicted_lkd does not contain observed inputs for reasons other than Yt=0"
         ) else {
-          library_output[is.na(last(library_output)), ncol(library_output)] <- 0  # zero prob for Yt=0
+          library_output[is.na(library_output[[ncol(library_output)]]), ncol(library_output)] <- 0  # zero prob for Yt=0
         }
       }
       temp_vec <- left_join(obs_data[, 1:(loc_var_last_not_integrated)], library_output)$output %>% suppressMessages
