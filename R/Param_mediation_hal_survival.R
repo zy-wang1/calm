@@ -560,7 +560,7 @@ Param_mediation_hal_survival <- R6Class(
                                                    fold_number = fold_number,
                                                    check = T)
                 
-                loc_outcome <- grep(self$outcome_node, temp_node_names)
+                loc_outcome <- which(temp_node_names == self$outcome_node)
                 # for all non-A, non-0 variables, calculate the variable by rule
                 # for Z's, use A = 0 values; outputs are predicted probs at each possible comb
                 # note that list_all_predicted_lkd is ordered by node

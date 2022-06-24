@@ -25,11 +25,20 @@ Param_mediation_exact_survival <- R6Class(
             if (length(loc_delta_nodes) != 0) temp_node_names <- temp_node_names[-grep("delta_", temp_node_names)]  # remove delta nodes for wide format fitting
             if (is.null(outcome)) private$.outcome_node <- last(temp_node_names) else private$.outcome_node <- outcome
             
+            # only target nodes before survival outcome
+            loc_Z <- which(sapply(temp_node_names, function(s) paste0(head(strsplit(s, "_")[[1]], -1), collapse = "_") == "Z"))
+            loc_RLY <- which(sapply(temp_node_names, function(s) !(paste0(head(strsplit(s, "_")[[1]], -1), collapse = "_") %in% c("A_C", "A_E", "Z")) & tail(strsplit(s, "_")[[1]], 1) != 0))
+            loc_outcome <- which(temp_node_names == self$outcome_node)  # directly define the loc of outcome
+            loc_target <- c(loc_Z, loc_RLY)
+            loc_target <- loc_target[loc_target <= loc_outcome]
+            update_nodes <- temp_node_names[loc_target]
+            private$.update_nodes <- update_nodes
+            
             private$.cf_likelihood_treatment <- CF_Likelihood$new(observed_likelihood, intervention_list_treatment)
             private$.cf_likelihood_control <- CF_Likelihood$new(observed_likelihood, intervention_list_control)
             # observed_likelihood$get_likelihoods(observed_likelihood$training_task)
         },
-        clever_covariates = function(tmle_task = NULL, fold_number = "full", update = T, node = NULL, submodel_type = "EIC") {
+        clever_covariates = function(tmle_task = NULL, fold_number = "full", update = T, node = NULL, submodel_type = "EIC", for_fitting = NULL) {
             if (is.null(tmle_task)) {  # calculate for obs data task if not specified
                 tmle_task <- self$observed_likelihood$training_task
             }
@@ -58,6 +67,8 @@ Param_mediation_exact_survival <- R6Class(
                 full_node_names <- names(full_task$npsem)
                 loc_delta_nodes <- grep("delta_", full_node_names)
                 if (length(loc_delta_nodes) != 0) full_node_names <- full_node_names[-grep("delta_", full_node_names)]  # remove delta nodes for wide format fitting
+                loc_Z <- which(sapply(full_node_names, function(s) paste0(head(strsplit(s, "_")[[1]], -1), collapse = "_") == "Z"))
+                loc_RLY <- which(sapply(full_node_names, function(s) !(paste0(head(strsplit(s, "_")[[1]], -1), collapse = "_") %in% c("A_C", "A_E", "Z")) & tail(strsplit(s, "_")[[1]], 1) != 0))
                 full_data <- full_task$data %>% as.data.frame %>% dplyr::select(-c(id, t)) %>% dplyr::select(!starts_with("delta"))  # exactly the obs data
                 full_variable_names <- colnames(full_data)
                 list_all_predicted_lkd <- lapply(1:length(full_node_names), function(loc_node) {
@@ -84,7 +95,10 @@ Param_mediation_exact_survival <- R6Class(
                         temp_task <- tmle3_Task$new(temp_input, full_task$npsem[c(1:loc_node,
                                                                                   sapply(paste0("delta_", full_node_names[1:loc_node]), function(x) grep(x, names(full_task$npsem))) %>% compact %>% unlist
                         )])
-                        temp_target_node <- intersect(self$update_nodes, full_node_names[loc_node])
+                        temp_target_node <- intersect(
+                            # self$update_nodes, 
+                            full_node_names[c(loc_Z, loc_RLY)], 
+                            full_node_names[loc_node])
                         if (length(temp_target_node) == 1) {
                             # for each short task, only the last node (if it is an update_node) needs to be updated
                             setattr(temp_task, "target_nodes", temp_target_node)
@@ -109,8 +123,8 @@ Param_mediation_exact_survival <- R6Class(
                     loc_delta_nodes <- grep("delta_", temp_node_names)
                     if (length(loc_delta_nodes) != 0) temp_node_names <- temp_node_names[-grep("delta_", temp_node_names)]  # remove delta nodes for wide format fitting
                     
-                    loc_A_E <- grep("A_E", temp_node_names)
-                    loc_A_C <- grep("A_C", temp_node_names)
+                    loc_A_E <- grep("^A_E", temp_node_names)
+                    loc_A_C <- grep("^A_C", temp_node_names)
                     loc_Z <- which(sapply(temp_node_names, function(s) paste0(head(strsplit(s, "_")[[1]], -1), collapse = "_") == "Z"))
                     loc_RLY <- which(sapply(temp_node_names, function(s) !(paste0(head(strsplit(s, "_")[[1]], -1), collapse = "_") %in% c("A_C", "A_E", "A", "Z")) & tail(strsplit(s, "_")[[1]], 1) != 0))
                     
@@ -165,6 +179,61 @@ Param_mediation_exact_survival <- R6Class(
                             return(list_H[[i]]*list_delta_Q[[i]])
                     })
                     names(list_EIC) <- temp_node_names
+                    
+                    
+                    
+                    
+                    
+                    
+                    # list_EIC <- lapply(seq_along(temp_node_names), function(sss) {
+                    #     node <- temp_node_names[sss]
+                    #     if (node %in% self$update_nodes) {
+                    #         tmle_task_backup <- tmle_task
+                    #         tmle_task <- self$observed_likelihood$training_task  # let tmle_task be obs task when calculating for library tasks
+                    #         loc_node <- which(names(tmle_task$npsem) == node)
+                    #         obs_data <- tmle_task$data %>% as.data.frame %>% dplyr::select(-c(id, t)) %>% dplyr::select(!starts_with("delta"))  # note this is compatible if tmle_task is a cf task
+                    #         obs_variable_names <- names(obs_data)
+                    #         intervention_variables <- map_chr(tmle_task$npsem[intervention_nodes], ~.x$variables)
+                    #         intervention_variables_loc <- map_dbl(intervention_variables, ~grep(.x, obs_variable_names))
+                    #         intervention_levels_treat <- map_dbl(self$intervention_list_treatment, ~.x$value %>% as.character %>% as.numeric)
+                    #         intervention_levels_control <- map_dbl(self$intervention_list_control, ~.x$value %>% as.character %>% as.numeric)
+                    #         names(intervention_levels_treat) <- names(self$intervention_list_treatment)
+                    #         names(intervention_levels_control) <- names(self$intervention_list_control)
+                    #         
+                    #         current_H <- get_current_H(loc_node,
+                    #                                    tmle_task, obs_variable_names,
+                    #                                    intervention_variables, intervention_levels_treat, intervention_levels_control,
+                    #                                    list_all_predicted_lkd  # this is decided above by fold_number
+                    #         )  # this is what we need for logistic submodel
+                    #         current_Q_next <- get_current_Q(loc_node, which_Q = 1,
+                    #                                         tmle_task, obs_variable_names,
+                    #                                         intervention_variables, intervention_levels_treat, intervention_levels_control,
+                    #                                         list_all_predicted_lkd,  # this is decided above by fold_number
+                    #                                         if_survival = T, loc_outcome
+                    #         )
+                    #         current_Q <- get_current_Q(loc_node, which_Q = 0,
+                    #                                    tmle_task, obs_variable_names,
+                    #                                    intervention_variables, intervention_levels_treat, intervention_levels_control,
+                    #                                    list_all_predicted_lkd,  # this is decided above by fold_number
+                    #                                    if_survival = T, loc_outcome
+                    #         )
+                    #         current_delta_Q <- current_Q_next - current_Q
+                    #         current_EIC <- current_H*current_delta_Q
+                    #         
+                    #         current_EIC <- list(current_EIC)
+                    #         names(current_EIC) <- node
+                    #         
+                    #         return(current_EIC)
+                    #     } else {
+                    #         return(NULL)  
+                    #     } 
+                    # })
+                    
+                    
+                    
+                    
+                    # only need at update nodes
+                    list_EIC <- list_EIC[seq_along(list_EIC) <= loc_outcome]
                     
                     list_EIC_inserted <- lapply(1:length(list_EIC), function(i) {
                         if (!is.null(list_EIC[[i]])) {
@@ -301,7 +370,10 @@ Param_mediation_exact_survival <- R6Class(
                     temp_task <- tmle3_Task$new(temp_input, tmle_task$npsem[c(1:loc_node,
                                                                               sapply(paste0("delta_", full_node_names[1:loc_node]), function(x) grep(x, names(tmle_task$npsem))) %>% compact %>% unlist
                     )])
-                    temp_target_node <- intersect(self$update_nodes, full_node_names[loc_node])
+                    temp_target_node <- intersect(
+                        # self$update_nodes, 
+                        full_node_names[c(loc_Z, loc_RLY)], 
+                        full_node_names[loc_node])
                     if (length(temp_target_node) == 1) {
                         # for each short task, only the last node (if it is an update_node) needs to be updated
                         setattr(temp_task, "target_nodes", temp_target_node)
@@ -325,7 +397,10 @@ Param_mediation_exact_survival <- R6Class(
                 intervention_levels_control <- map_dbl(self$intervention_list_control, ~.x$value %>% as.character %>% as.numeric)
                 
                 loc_impute <- grep("^Y_|^A_C_", temp_node_names)  # in integral, Y and A_C always 1
-                if (length(loc_A_C) > 0) loc_impute <- loc_impute[loc_impute <= last(loc_A_C)]  # the event after the last censoring node can be alive/dead; do not impute
+                # if (length(loc_A_C) > 0) loc_impute <- loc_impute[loc_impute <= last(loc_A_C)]  # the event after the last censoring node can be alive/dead; do not impute
+                maybe_impute <- which(seq_along(temp_node_names) > loc_outcome) %>% setdiff(loc_impute) %>% setdiff(match(intervention_nodes, temp_node_names))
+                if (length(maybe_impute) > 0) loc_impute <- c(loc_impute, maybe_impute) %>% sort  
+                # for survival outcome, can expand only up till the outcome node; impute the rest
                 
                 # nodes to integrate out in the target identification
                 # only support univaraite node for now; assume treatment level is one
@@ -340,6 +415,8 @@ Param_mediation_exact_survival <- R6Class(
                                                      rule_values = c(intervention_levels_control, 1,
                                                                      rep(1, length(loc_impute))))
                 
+                
+
                 # for each observed L_0 vector, generate all needed combinations, one version for A = 1, one version for A = 0
                 unique_L0 <- obs_data[, tmle_task$npsem[[1]]$variables] %>% unique
                 library_L0 <- data.frame(unique_L0, output =
@@ -349,16 +426,17 @@ Param_mediation_exact_survival <- R6Class(
                                                  # for all non-A, non-0 variables, calculate the variable by rule
                                                  # for Z's, use A = 0 values; outputs are predicted probs at each possible comb
                                                  # note that list_all_predicted_lkd is ordered by node
-                                                 temp_list_0 <- lapply(loc_Z,
+                                                 temp_list_0 <- lapply(loc_Z[loc_Z <= loc_outcome],
                                                                        function(each_t) {
                                                                            left_join(temp_all_comb_0, list_all_predicted_lkd[[each_t]])$output %>% suppressMessages
                                                                        })
-                                                 temp_list_1 <- lapply(loc_RLY,
+                                                 temp_list_1 <- lapply(loc_RLY[loc_RLY <= loc_outcome],
                                                                        function(each_t) {
                                                                            left_join(temp_all_comb_1, list_all_predicted_lkd[[each_t]])$output %>% suppressMessages
                                                                        })
                                                  temp_list <- c(temp_list_0, temp_list_1)
-                                                 pmap_dbl(temp_list, prod)[temp_all_comb_1[[var_outcome]] == 1] %>% sum %>% return  # only sum up survival term
+                                                 pmap_dbl(temp_list, prod) %>% sum %>% return  # for survival outcomes always 1
+                                                 # pmap_dbl(temp_list, prod)[temp_all_comb_1[[var_outcome]] == 1] %>% sum %>% return  # only sum up survival term
                                              })
                 )
                 # substitution estimator
@@ -402,18 +480,15 @@ Param_mediation_exact_survival <- R6Class(
             return(self$cf_likelihood_control$intervention_list)
         },
         update_nodes = function() {
-            # if (is.null(tmle_task)) {
-            tmle_task <- self$observed_likelihood$training_task
-            # }
-            temp_node_names <- names(tmle_task$npsem)
-            loc_delta_nodes <- grep("delta_", temp_node_names)
-            if (length(loc_delta_nodes) != 0) temp_node_names <- temp_node_names[-grep("delta_", temp_node_names)]  # remove delta nodes for wide format fitting
-            loc_A <- grep("A", sapply(strsplit(temp_node_names, "_"), function(x) x[1]))  # A_E or A_C
-            if_not_0 <- sapply(strsplit(temp_node_names, "_"), function(x) last(x) != 0)
-            nodes_to_update <- temp_node_names[if_not_0 & !((1:length(temp_node_names)) %in% loc_A)]
-            # nodes_to_update <- rev(nodes_to_update)
-            # nodes_to_update <- nodes_to_update[-length(nodes_to_update)]
-            return(nodes_to_update)
+            # tmle_task <- self$observed_likelihood$training_task
+            # temp_node_names <- names(tmle_task$npsem)
+            # loc_delta_nodes <- grep("delta_", temp_node_names)
+            # if (length(loc_delta_nodes) != 0) temp_node_names <- temp_node_names[-grep("delta_", temp_node_names)]  # remove delta nodes for wide format fitting
+            # loc_A <- grep("A", sapply(strsplit(temp_node_names, "_"), function(x) x[1]))  # A_E or A_C
+            # if_not_0 <- sapply(strsplit(temp_node_names, "_"), function(x) last(x) != 0)
+            # nodes_to_update <- temp_node_names[if_not_0 & !((1:length(temp_node_names)) %in% loc_A)]
+            # return(nodes_to_update)
+            return(private$.update_nodes)
         },
         list_EIC = function() {
             return(private$.list_EIC)
@@ -434,6 +509,7 @@ Param_mediation_exact_survival <- R6Class(
         .result = NULL,
         .result_val = NULL,
         .submodel_type_supported = c("EIC"), 
-        .outcome_node = NULL
+        .outcome_node = NULL, 
+        .update_nodes = NULL
     )
 )

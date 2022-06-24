@@ -68,8 +68,8 @@ Lrnr_mean_wrong <- R6Class(
       } else {
         temp <- weighted.mean(y - offset, weights) + 0.05
         # if (temp > 0.9) temp <- 0.9  # 20220428 more comparable
-        if (temp > 0.99) temp <- 0.99
-        if (temp < 0.01) temp <- 0.01
+        if (temp > 0.999999) temp <- 0.999999
+        # if (temp < 0.01) temp <- 0.01
         fit_object <- list(mean = temp)
       }
 
