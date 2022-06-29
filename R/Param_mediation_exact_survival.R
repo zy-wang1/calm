@@ -148,6 +148,7 @@ Param_mediation_exact_survival <- R6Class(
                                              list_all_predicted_lkd,  # val version decided above for fold_number == "validation"
                                              loc_outcome
                     )
+                    
                     temp_vec <- tmle_task$get_tmle_node(length(list_Q))
                     if (!is.null(tmle_task$npsem[[length(list_Q)]]$censoring_node$name)) {
                         to_keep <- tmle_task$get_tmle_node(tmle_task$npsem[[length(list_Q)]]$censoring_node$name)
@@ -155,7 +156,17 @@ Param_mediation_exact_survival <- R6Class(
                         to_keep[is.na(to_keep)] <- F
                         temp_vec <- temp_vec[to_keep]
                     }
-                    list_Q[[length(list_Q)+1]] <- temp_vec
+                    list_Q[[length(list_Q)+1]] <- temp_vec  # note that this may in fact be ignored for example for targets with outcome at t=1
+                    
+                    temp_vec <- tmle_task$get_tmle_node(loc_outcome) # this is always used
+                    if (!is.null(tmle_task$npsem[[loc_outcome]]$censoring_node$name)) {
+                        to_keep <- tmle_task$get_tmle_node(tmle_task$npsem[[loc_outcome]]$censoring_node$name)
+                        to_keep <- to_keep == 1
+                        to_keep[is.na(to_keep)] <- F
+                        temp_vec <- temp_vec[to_keep]
+                    }
+                    temp_i_plus <- first(which(!sapply(list_Q[(loc_outcome+1):length(list_Q)], is.null)))  # search for the first non-null loc after i
+                    list_Q[[loc_outcome+temp_i_plus]] <- temp_vec
                     list_delta_Q <- lapply(1:length(list_H), function(i) {
                         if (is.null(list_Q[[i]]))
                             return(NULL)
@@ -178,7 +189,7 @@ Param_mediation_exact_survival <- R6Class(
                         if (is.null(list_H[[i]])) return(NULL) else
                             return(list_H[[i]]*list_delta_Q[[i]])
                     })
-                    names(list_EIC) <- temp_node_names
+                    names(list_EIC) <- temp_node_names  # after loc_outcome node won't be used
                     
                     
                     
@@ -298,6 +309,20 @@ Param_mediation_exact_survival <- R6Class(
                                                list_all_predicted_lkd,  # this is decided above by fold_number
                                                if_survival = T, loc_outcome
                     )
+                    
+                    # correction for target outcome node in previous time points
+                    if (loc_node == loc_outcome) {
+                        temp_vec <- tmle_task_backup$get_tmle_node(loc_outcome)  # note that for this param we only calculate this type of clever covariates for fully expanded library tasks (tmle_task_backup here; see above) for each node
+                        # if (!is.null(tmle_task$npsem[[loc_outcome]]$censoring_node$name)) {
+                        #     to_keep <- tmle_task$get_tmle_node(tmle_task$npsem[[loc_outcome]]$censoring_node$name)
+                        #     to_keep <- to_keep == 1
+                        #     to_keep[is.na(to_keep)] <- F
+                        #     temp_vec <- temp_vec[to_keep]
+                        # }
+                        current_Q_next <- temp_vec
+                    }
+                    
+                    
                     current_delta_Q <- current_Q_next - current_Q
                     current_EIC <- current_H*current_delta_Q
                     
