@@ -1,6 +1,6 @@
-reload_calm <- function(path_folder = "~/Documents/projects/calm/", path_product = "./temp") {
+reload_calm <- function(path_folder = "~/Documents/Projects/calm/", path_product = "./temp") {
     devtools::build(path_folder, path = path_product)
-    install.packages("./temp/calm_1.0.tar.gz", repos = NULL, type = "source")
+    install.packages(paste0(path_product, "/calm_1.0.tar.gz"), repos = NULL, type = "source")
     detach("package:calm", unload = T)
     library(calm)
 }

@@ -544,8 +544,10 @@ tmle3_Update <- R6Class(
       }
 
       # ZW: enforce bounding condition
-      updated_likelihood[updated_likelihood > 0.999] <- 0.999
-      updated_likelihood[updated_likelihood < 0.001] <- 0.001
+      if (any(updated_likelihood > 0.999999)) message(paste0("Upper bound violated: ", update_node))
+      updated_likelihood[updated_likelihood > 0.999999] <- 0.999999
+      if (any(updated_likelihood < 0.000001)) message(paste0("Lower bound violated: ", update_node))
+      updated_likelihood[updated_likelihood < 0.000001] <- 0.000001
 
       if (any(!is.finite(updated_likelihood))) {
           # print(update_node)

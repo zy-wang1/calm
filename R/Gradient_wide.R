@@ -139,29 +139,23 @@ Gradient_wide <- R6Class(
       return(long_task)
     },
     compute_component = function(tmle_task, node, fold_number = "full"){
-      # print("Gradient")
-      # print(node)
-      # print(fold_number)
-      time <- tmle_task$npsem[[node]]$time
+      time <- tmle_task$npsem[[node]]$time  # not used for wide format
 
       self$assert_trained()
       #Converts squashed basis to R functions of tmle3_tasks
-
-      fit_obj <- private$.component_fits[[node]]
 
       long_task <- self$expand_task(tmle_task, node)
 
       IC_task <- self$generate_task(tmle_task, node, include_outcome = F, fold_number = fold_number)
 
-      if (long_task$npsem[[node]]$variable_type$glm_family() %in% c("binomial", "continuous")) {
+      if (long_task$npsem[[node]]$variable_type$glm_family() %in% c("binomial")) {
         col_index <- which(colnames(IC_task$X) == node )
       } else {
-        col_index <- grep(paste0("^", node, ".X"), colnames(IC_task$X))  # for categorical
+          stop("continuous and categorical time-varying nodes: in development")
+        # col_index <- grep(paste0("^", node, ".X"), colnames(IC_task$X))  # for categorical
       }
 
-
       long_preds <- NULL
-
 
       tryCatch({
         value_step1 <- self$likelihood$cache$get_update_step(self$likelihood$factor_list[[node]], tmle_task, fold_number, node = node)
@@ -199,7 +193,7 @@ Gradient_wide <- R6Class(
         long_preds <<- self$likelihood$get_likelihood(long_task, node, fold_number = fold_number, drop_id = T, drop_time = T, drop = T, check_sync = F  )
 
       })
-
+      # long_preds should be the conditional probability value at the currently expanded node variable values (the X in (X, Pa(X)))
 
       data <- IC_task$data
 
@@ -208,13 +202,15 @@ Gradient_wide <- R6Class(
       variables <- node
       #TODO check id order
 
-      data <- data.table(cbind(merge(long_task$data[,c("id", "trueid", "t")], cbind(long_task$get_tmle_node(node, format = T, include_id = T, include_time = T), long_preds), by = c("id", "t"))
-                               ))
+      data <- merge(long_task$data[,c("id", "trueid", "t")], 
+                                     cbind(long_task$get_tmle_node(node, format = T, include_id = T, include_time = T), long_preds), 
+                                     by = c("id", "t")
+                                     )
 
       idkey <- data$trueid
-      data$t <- NULL
-      data$id <- NULL
-
+      data[, t := NULL]
+      data[, id := NULL]
+      
       setnames(data, c("id", node, "pred"))
 
       setkeyv(data, cols = c("id", node))
@@ -224,7 +220,7 @@ Gradient_wide <- R6Class(
 
       data <- dcast(data, as.formula(paste0("id ~ ", node)), value.var = "pred")
       id <- data$id
-      data$id <- NULL
+      data[, id := NULL]
       levels <- as.numeric(colnames(data))
 
       cdf <- as.data.table(t(apply(data, 1, cumsum)))
@@ -239,63 +235,14 @@ Gradient_wide <- R6Class(
         cdf <- cdf[match_index]
       }
 
-
       fit_obj <- private$.component_fits[[node]]
-      basis_list <- fit_obj$basis_list
+      basis_list <- fit_obj$basis_list  # as of 0.4.3 hal9001, I{X >= u} for knot points u (order 0)
       coefs <- fit_obj$coefs
 
+      # focus on binary first; 
       col_index <- which(colnames(IC_task$X) == node )
-      if (length(col_index) == 0) {
-        # when we have multiple col_index, it was because categorical node was expanded by factor levels in task$X active method
-        col_index <- grep(paste0("^", node, ".X"), colnames(IC_task$X))
-
-        # now we project not I{X>x} basis, but I{ I{X==x} > u} basis; selected basis always has u=0 for binary I{X==x}
-        # I{ I{X==x} > u } - E[I{ I{X==x} > u} | Pa(X)] = indicator - conditional prob at x, if u=0\
-        # = -1 + indicator + "cdf"
-        # I{ I{X==x1} > u1, I{X==x2} > u2 } - E[ I{ I{X==x1} > u1, I{X==x2} > u2 } | Pa(X)] === 0, if two factors of same X are involved
-
-        keep <- sapply(basis_list, function(b){
-          # col_index %in% b$cols
-          sum(col_index %in% b$cols) == 1  # constant 0 if two factors of X=x contradict with each other
-        }) %>% unlist
-
-        basis_list <- basis_list[keep]
-        coefs <- coefs[c(T, keep)]
-
-        #Should already be sorted
-        X <- as.matrix(IC_task$X)
-        design <- as.data.table(as.matrix(hal9001::make_design_matrix(X, basis_list)))
-        # observed I{ I{X==x} > u } values for each I{X==x} variable basis, with cutoff u that should be 0
-
-        diff_map <- lapply(seq_along(basis_list), function(i) {
-          basis <- basis_list[[i]]
-
-          # result <- (list(which(levels == basis$cutoffs[which(basis$cols == col_index)])))
-          the_col <- basis$cols[basis$cols %in% col_index]  # should be only one involved factor indicator
-          which_level_x <- which(the_col == col_index)  # know which variable it was
-          which_level_u <- basis$cutoffs[which(basis$cols %in% col_index)]
-          result <- list(which_level_x, which_level_u)
-
-          return(result)
-        })  # which level x is the cutoff for this indicator basis
-
-
-        # now it is indicator - conditional prob
-        center_basis <- lapply(seq_along(diff_map), function(i){
-          # col_index <- diff_map[[i]]
-          # diff <- design[[as.integer(i)]] - 1 + cdf[[col_index]]
-          which_level_x <- diff_map[[i]][[1]]
-          which_level_u <- diff_map[[i]][[2]]
-          if (which_level_u == 0) {
-            diff <- design[[as.integer(i)]] - (cdf[[which_level_x+1]] - cdf[[which_level_x]])
-          } else {
-            diff <- design[[as.integer(i)]]
-          }
-
-          set(design, , as.integer(i), diff)
-        })
-        min_val <- min(as.matrix(IC_task$X)[, col_index]) - 5
-      } else {  # original version
+      {
+          # if y is not involved, then centering basis equals 0
         keep <- sapply(basis_list, function(b){
           col_index %in% b$cols
           # any(col_index %in% b$cols)
@@ -306,113 +253,44 @@ Gradient_wide <- R6Class(
 
         #Should already be sorted
         X <- as.matrix(IC_task$X)
-        design <- as.data.table(as.matrix(hal9001::make_design_matrix(X, basis_list)))
+        design <- as.data.table(as.matrix(hal9001::make_design_matrix(X, basis_list)))  # this is phi basis value
+        
+        # diff_map <- sapply(seq_along(basis_list), function(i) {
+        #   basis <- basis_list[[i]]
+        #   result <- (list(which(levels == basis$cutoffs[which(basis$cols == col_index)])))
+        #   # result <- (list(which(levels == basis$cutoffs[which(basis$cols %in% col_index)])))
+        # 
+        #   return(result)
+        # })  # which level x is the cutoff for this indicator basis; for binary variable and I{Y >= u_Y} basis, cutoff is always 1, i.e. the second level in levels
+        diff_map <- lapply(seq_along(basis_list), function(x) return(2))
 
-        diff_map <- sapply(seq_along(basis_list), function(i) {
-          basis <- basis_list[[i]]
-          result <- (list(which(levels == basis$cutoffs[which(basis$cols == col_index)])))
-          # result <- (list(which(levels == basis$cutoffs[which(basis$cols %in% col_index)])))
-
-          return(result)
-        })  # which level x is the cutoff for this indicator basis
-
+        # I{X >= u_X}I{Y >= u_Y} - P(Y >= u_Y | X); I{X >= u_X} is redundant but okay with clean_design of I{X >= u_X} again
         center_basis <- lapply(seq_along(diff_map), function(i){
-          col_index <- diff_map[[i]]
-          diff <- design[[as.integer(i)]] - 1 + cdf[[col_index]]
+          temp_index <- diff_map[[i]]
+          diff <- design[[as.integer(i)]] - 1 + cdf[[temp_index - 1]]  # cdf is the value of <= level; we need >= level probability
           set(design, , as.integer(i), diff)
         })
-        min_val <- min(IC_task$X[[node]]) - 5
       }
 
+      min_val <- min(IC_task$X[[node]]) - 5
       clean_basis <- function(basis){
         # index = which(basis$cols == col_index)
         index = which(basis$cols %in% col_index)
         basis$cutoffs[index] <- min_val
         return(basis)
       }
-      clean_list = lapply(basis_list, clean_basis)  # for involved phi, set cutoff as -infty
-      #print(table(unlist( lapply(basis_list, `[[`, "cols"))))
-      clean_design <- hal9001::make_design_matrix(X, clean_list)
-      # clean_design <- data.table(as.matrix(clean_design))
-      clean_design <- data.table(as.matrix((clean_design) > 0) * 1)
+      clean_list = lapply(basis_list, clean_basis)  # for involved phi, set cutoff at y as -infty; this is the Pa(X) component in the basis
+      clean_design <- as.data.table(as.matrix(hal9001::make_design_matrix(X, clean_list)))
 
-      # print(as.data.table(clean_design))
-      # print(as.data.table(coefs))
-
-      mid_result <- as.matrix(design * clean_design)
+      mid_result <- as.matrix(design * clean_design)  # design is the centered basis (with a redundant Pa(X) component); clean_design is the Pa(X) component
       result =  mid_result %*% coefs[-1]
-      out = list(col_index = col_index,Y = IC_task$Y, cdf = cdf,design = design,  mid_result = mid_result, coefs = coefs[-1], EIC = result)
+      out = list(
+          # col_index = col_index,Y = IC_task$Y, cdf = cdf,design = design,  mid_result = mid_result, coefs = coefs[-1], 
+          EIC = result)
       return(out)
 
     },
-    compute_component_initial = function(tmle_task, node, fold_number = "full"){
-      self$assert_trained()
-      #Converts squashed basis to R functions of tmle3_tasks
-      stop("no")
-      fit_obj <- private$.component_fits[[node]]
-      task <- self$generate_task(tmle_task, node, include_outcome = F)
-      # col_index <- which(colnames(task$X) == tmle_task$npsem[[node]]$variables )
-      col_index <- grep(paste0("^", tmle_task$npsem[[node]]$variables, ".X"), colnames(task$X))
-
-      preds <- self$likelihood$factor_list[[node]]$get_density(tmle_task, fold_number, quick_pred = T)
-      type <- tmle_task$npsem[[node]]$variable_type$type
-      if(type == "binomial"){
-        preds <- data.table(cbind(1-preds, preds))
-        setnames(preds, c("1", "2"))
-        levels <- c(0,1)
-      } else if (type == "categorical") {
-        levels <- tmle_task$npsem[[node]]$variable_type$levels
-        preds <- data.table(sl3::unpack_predictions(as.vector(preds)))
-        setnames(preds, as.character(seq_along(levels)))
-      } else{
-        stop("Type not supported")
-      }
-
-      cdf <- data.table(t(apply(preds, 1, cumsum)))
-      basis_list <- fit_obj$basis_list
-      coefs <- as.vector(fit_obj$coefs)
-      X <- as.matrix(task$X)
-      design <- as.data.table(as.matrix(hal9001::make_design_matrix(X, basis_list)))
-
-      diff_map <- unlist(lapply(seq_along(basis_list), function(i) {
-        basis <- basis_list[[i]]
-        if(!(col_index %in% basis$cols)){
-          return(NULL)
-        }
-        result <- (list(which(levels == basis$cutoffs[which(basis$cols == col_index)])))
-        names(result) = i
-        return(result)
-      }))
-
-      center_basis <- lapply((names(diff_map)), function(i){
-        col_index <- diff_map[[i]]
-        diff <- design[[as.integer(i)]] - 1 + cdf[[col_index]]
-        set(design, , as.integer(i), diff)
-      })
-
-      clean_basis <- function(basis){
-        if(!(col_index %in% basis$cols)){
-          return(basis)
-        }
-        index = which(basis$cols == col_index)
-        basis$cutoffs[index] <- min(task$X[[node]]) - 1
-        return(basis)
-      }
-      clean_list = lapply(basis_list, clean_basis)
-
-      clean_design <- hal9001::make_design_matrix(X, clean_list)
-      # clean_design <- data.table(as.matrix(clean_design))
-      clean_design <- data.table(as.matrix((clean_design) > 0) * 1)
-
-      #TODO only do this for basis functions containing y
-
-      mid_result <- as.matrix(design * clean_design)
-      result =  mid_result %*% coefs[-1]
-      out = list(mat = mid_result, EIC = result)
-      return(out)
-
-
-    },
+    
     base_train = function(task, pretrain) {
       fit_object <- private$.train(task, pretrain)
       #new_object <- self$clone() # copy parameters, and whatever else
@@ -550,6 +428,7 @@ Lrnr_hal9001a <- R6::R6Class(
                           return_x_basis = FALSE,
                           basis_list = NULL,
                           cv_select = TRUE,
+                          smoothness_orders = 0,
                           ...) {
       params <- args_to_list()
       super$initialize(params = params, ...)
