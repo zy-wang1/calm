@@ -220,7 +220,8 @@ Param_mediation_hal_survival <- R6Class(
                         temp_sample <- new_sample
                     }
                     # if (length(grep("^A_C_", tmle_task$npsem[[i]]$name)) == 1) temp_sample[is.na(temp_sample)] <- 0  # use 0 not NA for censored in A_C_ nodes
-                    temp_input <- temp_input[, temp_node_names[i]:=temp_sample]
+                    # temp_input <- 
+                        temp_input[, temp_node_names[i]:=temp_sample]
                 }
                 # align event process; non increasing; only for survival targets
                 for (k in 1:length(loc_Y)) {
@@ -331,7 +332,8 @@ Param_mediation_hal_survival <- R6Class(
             if (is.null(tmle_task)) {
                 tmle_task <- self$observed_likelihood$training_task
             }
-            update_nodes <- intersect(self$update_nodes, attr(tmle_task, "target_nodes"))
+            # update_nodes <- intersect(self$update_nodes, attr(tmle_task, "target_nodes"))
+            update_nodes <- self$update_nodes
             if(!is.null(node)){
                 update_nodes <- c(node)
             }
@@ -341,11 +343,17 @@ Param_mediation_hal_survival <- R6Class(
             } else {
                 islong= T
             }
-            EICs <- lapply(update_nodes, function(node){
+            list_temp <- lapply(update_nodes, function(node){
                 temp <- self$gradient$compute_component(tmle_task, node, fold_number = fold_number)$EIC
+            })
+            names(list_temp) <- update_nodes
+            
+            EICs <- lapply(update_nodes, function(node){
+                # temp <- self$gradient$compute_component(tmle_task, node, fold_number = fold_number)$EIC
+                temp <- list_temp[[node]]
                 if (length(temp) > 0) return(temp) else {
                     if (is(tmle_task$npsem[[node]]$censoring_node, "tmle3_Node")) {
-                        temp <- sum(tmle_task$get_tmle_node(tmle_task$npsem[[node]]$censoring_node$name) == 1)
+                        temp <- sum(tmle_task$get_tmle_node(tmle_task$npsem[[node]]$censoring_node$name) == 1, na.rm = T)
                         return(rep(0, temp) %>% as.matrix(ncol = 1))
                     } else {
                         return(rep(0, tmle_task$nrow) %>% as.matrix(ncol = 1))
@@ -355,7 +363,8 @@ Param_mediation_hal_survival <- R6Class(
             names(EICs) <- update_nodes
             
             EICs_impute <- lapply(update_nodes, function(node){
-                temp_vec <- self$gradient$compute_component(tmle_task, node, fold_number = fold_number)$EIC %>% as.vector
+                # temp_vec <- self$gradient$compute_component(tmle_task, node, fold_number = fold_number)$EIC %>% as.vector
+                temp_vec <- list_temp[[node]] %>% as.vector
                 if (length(temp_vec) == 0) {
                     temp_vec <- rep(0, tmle_task$nrow)
                 } else {
@@ -580,10 +589,24 @@ Param_mediation_hal_survival <- R6Class(
                 
                 actual_V <- prep_list[1:grep(paste0("^", tmle_task$npsem[[self$outcome_node]]$variables, "$"), names(prep_list))] %>% sapply(length) %>% prod
                 psi <- actual_V * psi
+                
+                
+                unique_L0 <- obs_data[, tmle_task$npsem[[1]]$variables] %>% unique
+                temp_list <- c(temp_list_0, temp_list_1)
+                temp_value <- pmap_dbl(temp_list, prod) %>% head(-1)
+                tmle_task$npsem[[1]]$variables
+                dt_mc <- mc_task_trt$data
+                dt_mc <- dt_mc[-.N]
+                dt_mc[, value := temp_value]
+                unique_value <- sapply(1:nrow(unique_L0), function(i) {
+                    temp_mc <- dt_mc[unique_L0[i, ], on = tmle_task$npsem[[1]]$variables, nomatch = 0]
+                    actual_V <- prep_list[1:grep(paste0("^", tmle_task$npsem[[self$outcome_node]]$variables, "$"), names(prep_list))] %>% sapply(length) %>% tail(-length(tmle_task$npsem[[1]]$variables)) %>% prod
+                    mean(temp_mc$value)*actual_V
+                })
+                vec_est <- left_join(obs_data[, tmle_task$npsem[[1]]$variables], data.frame(unique_L0, output = unique_value))$output %>% suppressMessages
+            } else {
+                vec_est <- rep(0, nrow(tmle_task$data))
             }
-            
-            
-            
             
             
             if (final) {
@@ -640,8 +663,9 @@ Param_mediation_hal_survival <- R6Class(
             }
             
             
-            EIC <- cbind(EIC, rep(0, nrow(EIC))
-                         # vec_est - psi
+            EIC <- cbind(EIC, 
+                         # rep(0, nrow(EIC))
+                         vec_est - mean(vec_est)
             )
             
             IC <- rowSums(EIC)
